@@ -1,0 +1,109 @@
+"""
+Project 6: Stock Price Tracker
+Fetches daily stock prices from Alpha Vantage, cleans them with pandas,
+charts them with matplotlib, and saves them to a CSV file.
+ 
+Before running:
+    pip install requests pandas matplotlib
+Get a free API key at: https://www.alphavantage.co/support/#api-key
+"""
+
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+
+API_KEY="demo"
+SYMBOL="IBM"
+
+# ---------------------------------------------------------------
+# STEP 2: Ask the API for data
+# ---------------------------------------------------------------
+def fetch_daily_prices(symbol, apikey):
+    url="https://www.alphavantage.co/query"
+    params={
+        "function":"TIME_SERIES_DAILY", #daily prices
+        "symbol":symbol,
+        "apikey":apikey,
+    }
+    response=requests.get(url,params=params,timeout=60)
+    response.raise_for_status()
+    data = response.json()
+
+    if "Time Series (Daily)" not in data:
+        print("Something went wrong. The API said:")
+        print(data)
+        return None
+    return data["Time Series (Daily)"]
+
+
+# ---------------------------------------------------------------
+# STEP 3: Clean the data with pandas
+# ---------------------------------------------------------------
+
+def clean_data(raw):
+    df=pd.DataFrame.from_dict(raw,orient="index")
+
+    # Rename "1. open" -> "open", etc.
+    df=df.rename(columns={"1. open":"open",
+                         "2. high":"high" ,
+                         "3. low":"low",
+                         "4. close":"close",
+                         "5. volume":"volume"})
+    
+    # Numbers arrive as text, so convert them
+    df=df.astype(float)
+    
+    # Dates arrive as text too; convert and sort oldest -> newest
+    df.index=pd.to_datetime(df.index)
+    df.index.name="date"
+    df=df.sort_index()
+
+    # Drop any empty rows, just in case
+    df=df.dropna()
+    return df
+    
+# ---------------------------------------------------------------
+# STEP 4: Save to CSV
+# ---------------------------------------------------------------
+def save_to_csv(df,symbol):
+    filename=f"{symbol}_daily_prices.csv"
+    df.to_csv(filename)
+    print(f"Saved data to {filename}")
+ 
+# ---------------------------------------------------------------
+# STEP 5: Draw a chart
+# ---------------------------------------------------------------
+def plot_prices(df, symbol):
+    plt.figure(figsize=(12,6))
+    plt.plot(df.index,df["close"], label="Closing price")
+
+    # Bonus: 20-day moving average smooths out daily noise
+    df["ma20"]=df["close"].rolling(window=20).mean()
+    plt.plot(df.index, df["ma20"], label="20-day average", linestyle="--")
+
+    plt.title(f"{symbol} Daily Closing Price")
+    plt.xlabel("Date")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(f"{symbol}_chart.png")
+    plt.show()
+    
+# ---------------------------------------------------------------
+# STEP 6: Run everything in order
+# ---------------------------------------------------------------
+
+def main():
+    raw= fetch_daily_prices(SYMBOL, API_KEY)
+    if raw is None:
+        return
+
+    df=clean_data(raw)
+    print(df.tail())
+
+    save_to_csv(df,SYMBOL)
+    plot_prices(df, SYMBOL)
+if __name__ == "__main__":
+    main()
